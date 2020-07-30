@@ -34,7 +34,7 @@ dataDir = '/Users/shoichirotakeda/Movies';
 outputDir = [pwd, '\outputs'];
 
 % Select input video
-inFile = fullfile(dataDir,['baby.mp4']); % Change your data name
+inFile = fullfile(dataDir,['gun.avi']); % Change your data name
 [Path,FileName,Ext] = fileparts(inFile);
 
 % Read video
@@ -45,52 +45,32 @@ vid = vr.read();
 % Set video parameter
 FrameRate = round(vr.FrameRate);
 [nH, nW, nC, nF]= size(vid);
-ScaleVideoSize = 1;
-StartFrame = 1;
-EndFrame   = nF;
 fprintf('Original VideoSize ... nH:%d, nW:%d, nC:%d, nF:%d\n', nH, nW, nC, nF);
 
 % Set CSF parameter
 nOri = 8; % number of orientations
 nProp = 5; % fix all video in CVPR2018
 
-% % Set magnification parameter (gun.mp4)
-% alpha = 10;
-% targetFreq = 20;
-% fs = 480;
-% beta = 0.3;
+% Set magnification parameter (gun.avi)
+ScaleVideoSize = 8/10;
+StartFrame = 1;
+EndFrame   = nF;
 
-% % Set magnification parameter (golf.mp4)
-% alpha = 25;
-% targetFreq = 2;
-% fs = 60;
-% beta = 0.8;
-
-% Set magnification parameter (cat_toy.mp4)
-% alpha = 5;
-% targetFreq = 3;
-% fs = 240;
-% beta = 0.8;
-
-% Set magnification parameter (ukulele.mp4)
-ScaleVideoSize = 0.5;
-StartFrame = 4.8*FrameRate;
-EndFrame   = StartFrame+10*FrameRate;
-
-% Set Parameter
-alpha = 25;
-targetFreq = 40;
-fs = 240;
-beta = 1;
+alpha = 100;
+targetFreq = 20;
+fs = 480;
+beta = 0.5;
+FAF_weight = 1;
 
 % Set output Name
-resultName = ['mag-',FileName, ...
+resultName = ['mag-vmw-',FileName, ...
             '-scale-' num2str(ScaleVideoSize) ...
             '-ori-' num2str(nOri) ...
             '-fs-' num2str(fs) ...
             '-ft-' num2str(targetFreq) ...
             '-alp-' num2str(alpha) ...
             '-beta-' num2str(beta) ...
+            '-wFAF-' num2str(FAF_weight) ...
             ];
         
 %% Preprocess for input video
@@ -221,62 +201,85 @@ for ori = 1:1:nOri
     
 end
 
-%% Create Hierarchinal Amplitude Mask
+%% Create Hierarchical Edge-Aware Regularization
 fprintf('\n');
-fprintf('Create Hierarchinal Amplitude Mask\n'); 
-octave_width = 5; % pyramid level width of interest
-octave_width_half = ceil(octave_width / 2)-1;
+fprintf('Create Hierarchical Edge-Aware Regularization\n'); 
 
 for ori = 1:1:nOri
-    fprintf('Processing Pyramid Orientations %d of %d\n', ori, nOri);
     for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
+        fprintf('Processing pyramid level: %d, orientation: %d\n', level, ori);
         tmp_norm_amp = norm_amp{level,ori};
         
-        for w = oct-octave_width_half:oct+octave_width_half % ���ݒ��ڂ���octave�𒆐S�ɂƂ���octave_width���̏��ɒ���
-            if w ~= oct && w >= 1 && w <= size(pyrIDXs,2)   % octave_width�͈͓̔��Œ�`��Ɏ��܂�octave�̏����C���ݒ��ڂ���octave�Ɏ������
-                res_norm_amp_w = original_imresize3_gpu(norm_amp{pyrIDXs(ori,w)}, tmp_norm_amp);
-                tmp_norm_amp = max(tmp_norm_amp, res_norm_amp_w);
+        for prop = level-floor(nProp/2):level+floor(nProp/2)
+            if prop ~= level && prop >= 1 && prop <= nPyrLevel-1
+                tmp_norm_amp = max( tmp_norm_amp, myimresize3(norm_amp{pyrIDXs(prop,ori)}, tmp_norm_amp) );
             end
         end
         
-        norm_amp{pyrIDXs(ori,oct)} = tmp_norm_amp;
-    end
-end
-
-% for ori = 1:1:size(pyrIDXs,1) 
-%     for oct = 1:1:size(pyrIDXs,2)
-%         fprintf('Processing Pyramid Level %d of %d\n', pyrIDXs(ori,oct), nPyrLevels);
-%         
-%         tmp_norm_amp = norm_amp{pyrIDXs(ori,oct)};
-%         
-%         for w = oct-octave_width_half:oct+octave_width_half % ���ݒ��ڂ���octave�𒆐S�ɂƂ���octave_width���̏��ɒ���
-%             if w ~= oct && w >= 1 && w <= size(pyrIDXs,2)   % octave_width�͈͓̔��Œ�`��Ɏ��܂�octave�̏����C���ݒ��ڂ���octave�Ɏ������
-%                 res_norm_amp_w = original_imresize3_gpu(norm_amp{pyrIDXs(ori,w)}, tmp_norm_amp);
-%                 tmp_norm_amp = max(tmp_norm_amp, res_norm_amp_w);
-%             end
-%         end
-%         
-%         norm_amp{pyrIDXs(ori,oct)} = tmp_norm_amp;
-%     end
-% end
-
-fprintf('\n');
-fprintf('2D Gaussian Smoothing\n'); 
-g_norm_amp = norm_amp; %% initialized
-for ori = 1:1:size(pyrIDXs,1) 
-    for oct = 1:1:size(pyrIDXs,2)
-        fprintf('Processing Pyramid Level %d of %d\n', pyrIDXs(ori,oct), nPyrLevels);
-
-        sigma = DownSamplingFacter(pyrIDXs(ori,oct));
-        tmp_norm_amp = gpuArray(norm_amp{pyrIDXs(ori,oct)});
+        sigma = 1/lambda(level,ori);
         
-        for frameIDX = 1:1:nF  
-            g_tmp_norm_amp = imgaussfilt(tmp_norm_amp(frameIDX,:,:), sigma);            
-            tmp_norm_amp(frameIDX,:,:) = ( g_tmp_norm_amp - min(g_tmp_norm_amp(:)) ) ./ ( max(g_tmp_norm_amp(:)) - min(g_tmp_norm_amp(:))+eps );
+        for f = 1:1:nF
+            g_tmp_norm_amp = imgaussfilt(tmp_norm_amp(f,:,:), sigma);            
+            tmp_norm_amp(f,:,:) = ( g_tmp_norm_amp - min(g_tmp_norm_amp(:)) ) ./ ( max(g_tmp_norm_amp(:)) - min(g_tmp_norm_amp(:))+eps );
         end
         
-        g_norm_amp{pyrIDXs(ori,oct)} = gather(tmp_norm_amp);  
+        g_norm_amp{level,ori} = gather(tmp_norm_amp);
     end
+end
+clear norm_amp; % for releasing memory
+
+%% Create Fractioanl Anisotropic Filter
+fprintf('\n');
+fprintf('Create Fractioanl Anisotropic Filter\n'); 
+
+% if size(dir('CreateAnisotropicSpectralFilter_expo.mexw64'),1) == 0
+% mex -I"C:\Users\Shoichiro Takeda\Documents\NTT����\Amplitude-weighted Anisotoropic Spectral Masking for Video Magnification\Eigen" ...
+%         Create_ADC_FA.cpp ...
+%         '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
+% else
+%     disp('Exist Builded Mex file')
+% end
+
+windowSize = ceil(fs / (4 * targetFreq)); 
+sigma      = windowSize/sqrt(2);
+
+if windowSize < 3
+    windowSize = 3;
+end
+
+if mod(windowSize,2) == 0 % windowSize�������̎� 
+    x = linspace(-4*sigma, 4*sigma, windowSize+1);
+else % windowSize����̎� 
+    x = linspace(-4*sigma, 4*sigma, windowSize);
+    windowSize = windowSize - 1;
+end
+
+twindowSize = windowSize;
+swindowSize = 4;
+
+for level = 2:orientations:nPyrLevels-1
+    fprintf('Processing pyramid level: %d, orientation: %d\n', level, ori);
+    
+    [~, tmp_h, tmp_w] = size(filtered_phase{level,ori});
+    tmp_subtle_phase= zeros(nF, tmp_h, tmp_w, orientations, 'single');
+    
+    for ori = 1:1:orientations
+        tmp_subtle_phase(:,:,:,ori) = myimresize3(JAF{level,ori}.*filtered_phase{level,ori}, filtered_phase{level,1});
+    end 
+    
+    FA = calcFA(tmp_subtle_phase, twindowSize, swindowSize);
+    
+    sigma = 1/lambda(level,ori);
+    tmp_FA = gpuArray(FA);
+
+    for frameIDX = 1:1:nF  
+        if sum(tmp_FA(frameIDX,:,:),'all') ~= 0
+            g_tmp_FA = imgaussfilt(tmp_FA(frameIDX,:,:), sigma);
+            tmp_FA(frameIDX,:,:) = ( g_tmp_FA - min(g_tmp_FA(:)) ) ./ ( max(g_tmp_FA(:)) - min(g_tmp_FA(:))+eps );
+        end
+    end
+
+    FAF{level} = gather(tmp_FA) .^ FAF_weight;
 end
 
 %% Magnification
@@ -294,7 +297,9 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
         cfilter = CSF{level,ori};
         
         % detP = filtered_phase{level,ori}; 
-        detP = JAF{level,ori} .* filtered_phase{level,ori};
+        % detP = JAF{level,ori} .* filtered_phase{level,ori};
+        resize_FAF = myimresize3(FAF{level}, filtered_phase{level,ori});    
+        detP = resize_FAF .* g_norm_amp{level,ori} .* JAF{level,ori} .* filtered_phase{level,ori};
 
         for f = 1:nF
             CSF_fft_Y = cfilter .* fft_Y(hIDX, wIDX, f);  
