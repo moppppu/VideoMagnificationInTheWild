@@ -29,12 +29,12 @@ addpath(fullfile(pwd, 'myfunctions/utilize'));
 addpath(fullfile(pwd, 'Filters'));
 
 % Set dir
-% dataDir = 'C:\Users\Shoichiro Takeda\Videos'; % Change your dir
-dataDir = '/Users/shoichirotakeda/Movies';
+dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
+% dataDir = '/Users/shoichirotakeda/Movies';
 outputDir = [pwd, '\outputs'];
 
 % Select input video
-inFile = fullfile(dataDir,['gun.avi']); % Change your data name
+inFile = fullfile(dataDir,['ukulele.mp4']); % Change your data name
 [Path,FileName,Ext] = fileparts(inFile);
 
 % Read video
@@ -52,15 +52,24 @@ nOri = 8; % number of orientations
 nProp = 5; % fix all video in CVPR2018
 
 % Set magnification parameter (gun.avi)
-ScaleVideoSize = 8/10;
-StartFrame = 1;
-EndFrame   = nF;
+% ScaleVideoSize = 8/10;
+% StartFrame = 1;
+% EndFrame   = nF;
+% alpha = 100;
+% targetFreq = 20;
+% fs = 480;
+% beta = 0.5;
+% FAF_weight = 1;
 
-alpha = 100;
-targetFreq = 20;
-fs = 480;
-beta = 0.5;
-FAF_weight = 1;
+% Set magnification parameter (ukulele.mp4)
+ScaleVideoSize = 1/3;
+StartFrame = 4.8*FrameRate;
+EndFrame   = StartFrame+10*FrameRate;
+alpha = 260;
+targetFreq = 40;
+fs = 240;
+beta = 1;
+FAF_weight = 5;
 
 % Set output Name
 resultName = ['mag-vmw-',FileName, ...
@@ -146,7 +155,7 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
             if f == 1
                 phaseRef = angle(R);    
                 phase = gpuArray( zeros(nF, numel(hIDX), numel(wIDX), 'single') );
-                norm_amp{level,ori} = gpuArray( zeros(nF, numel(hIDXs), numel(wIDXs), 'single') );
+                norm_amp{level,ori} = zeros(nF, numel(hIDX), numel(wIDX), 'single');
             end
 
             ampCurrent = abs(R);
@@ -163,7 +172,7 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
             norm_ampCurrenct = (x - u) / sigma; % (Eq.17)
             
             phase(f,:,:) = mod(pi+phaseCurrent-phaseRef,2*pi)-pi;
-            norm_amp{level,ori}(f,:,:) = gather(single(norm_ampCurrenct));
+            norm_amp{level,ori}(f,:,:) = single(norm_ampCurrenct);
         end
 
         fprintf('Phase Unwrapping \n');
@@ -212,11 +221,13 @@ for ori = 1:1:nOri
         
         for prop = level-floor(nProp/2):level+floor(nProp/2)
             if prop ~= level && prop >= 1 && prop <= nPyrLevel-1
-                tmp_norm_amp = max( tmp_norm_amp, myimresize3(norm_amp{pyrIDXs(prop,ori)}, tmp_norm_amp) );
+                tmp_norm_amp = max( tmp_norm_amp, myimresize3(norm_amp{prop,ori}, tmp_norm_amp) );
             end
         end
         
+%         norm_amp{level,ori} = tmp_norm_amp; % miss @ cvpr2019
         sigma = 1/lambda(level,ori);
+        tmp_norm_amp = gpuArray(tmp_norm_amp);
         
         for f = 1:1:nF
             g_tmp_norm_amp = imgaussfilt(tmp_norm_amp(f,:,:), sigma);            
@@ -232,13 +243,13 @@ clear norm_amp; % for releasing memory
 fprintf('\n');
 fprintf('Create Fractioanl Anisotropic Filter\n'); 
 
-% if size(dir('CreateAnisotropicSpectralFilter_expo.mexw64'),1) == 0
-% mex -I"C:\Users\Shoichiro Takeda\Documents\NTT����\Amplitude-weighted Anisotoropic Spectral Masking for Video Magnification\Eigen" ...
-%         Create_ADC_FA.cpp ...
-%         '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
-% else
-%     disp('Exist Builded Mex file')
-% end
+if size(dir('calcFA.mexw64'),1) == 0
+mex -I"C:\Users\shoichirotakeda\Programs\MATLAB\Video Magnification in the Wild (forShare)\Eigen" ...
+        calcFA.cpp ...
+        '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
+else
+    disp('Exist Builded Mex file')
+end
 
 windowSize = ceil(fs / (4 * targetFreq)); 
 sigma      = windowSize/sqrt(2);
@@ -257,13 +268,13 @@ end
 twindowSize = windowSize;
 swindowSize = 4;
 
-for level = 2:orientations:nPyrLevels-1
-    fprintf('Processing pyramid level: %d, orientation: %d\n', level, ori);
+for level = 2:1:nPyrLevel-1
+    fprintf('Processing pyramid level: %d\n', level);
     
-    [~, tmp_h, tmp_w] = size(filtered_phase{level,ori});
-    tmp_subtle_phase= zeros(nF, tmp_h, tmp_w, orientations, 'single');
+    [~, tmp_h, tmp_w] = size(filtered_phase{level,1});
+    tmp_subtle_phase= zeros(nF, tmp_h, tmp_w, nOri, 'single');
     
-    for ori = 1:1:orientations
+    for ori = 1:1:nOri
         tmp_subtle_phase(:,:,:,ori) = myimresize3(JAF{level,ori}.*filtered_phase{level,ori}, filtered_phase{level,1});
     end 
     
@@ -346,62 +357,91 @@ writeVideo(vidOut, outFrame_final);
 
 close(vidOut);
 
+% %% Compress output data size via ffmpeg
+% ! ffmpeg -i ./outputs/pre.avi -c:v libx264 -preset veryslow -crf 1 -pix_fmt yuv420p ./outputs/output.mp4
+% fprintf('\n');
+% fprintf('rename\n'); movefile('./outputs/output.mp4',['./outputs/', resultName, '.mp4']);
+% fprintf('delete prefile\n'); delete('./outputs/pre.avi');
+% fprintf('Done\n');
+
+figure('position', [9.80000000000000,599.400000000000,3034,934.400000000000]);
+set(gcf,'Visible', 'off');
+set(gcf,'color',[0 0 0])
+colormap jet;
+level = 2;
+ori = 6;
+map_caxis = [0,1];
+phase_caxis = [-0.3,0.3];
+% F(nF) = struct('cdata',[],'colormap',[]);
+tmp_FAF = myimresize3(FAF{level}, filtered_phase{level,ori});    
+for t = 1:1:nF
+disp(t);
+subplot(2,4,1);
+imagesc(vid(:,:,:,t));
+axis off;
+
+subplot(2,4,2);
+imagesc( squeeze( JAF{level,ori}(t,:,:)) );
+caxis(map_caxis);
+% title('JAF')
+axis off;
+
+subplot(2,4,3);
+imagesc( squeeze(tmp_FAF(t,:,:)) );
+% title('FAF')
+caxis(map_caxis);
+axis off;
+
+subplot(2,4,4);
+imagesc( squeeze(g_norm_amp{level,ori}(t,:,:)) );
+% title('HEAR')
+caxis(map_caxis*0.5);
+axis off;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+subplot(2,4,4+1);
+imagesc(squeeze(filtered_phase{level,ori}(t,:,:)));
+caxis([-0.20,0.20]);   
+% title('acc')
+axis off;
+
+subplot(2,4,4+2);
+imagesc(squeeze(JAF{level,ori}(t,:,:) .* filtered_phase{level,ori}(t,:,:)));
+caxis([-0.13, 0.13]);
+% title('jerk')
+axis off;
+
+subplot(2,4,4+3);
+imagesc(squeeze(tmp_FAF(t,:,:) .* JAF{level,ori}(t,:,:) .* filtered_phase{level,ori}(t,:,:)));
+caxis([-0.048, 0.048]);  
+% title('jerk with FAF')
+axis off;
+
+subplot(2,4,4+4);
+imagesc(squeeze(g_norm_amp{level,ori}(t,:,:) .* tmp_FAF(t,:,:) .* JAF{level,ori}(t,:,:) .* filtered_phase{level,ori}(t,:,:)));
+caxis([-0.007, 0.007]);   
+% title('our')
+axis off;
+
+F(t) = getframe(gcf);
+end
+
+fprintf('\n');
+fprintf('Output Video\n');
+outName = fullfile(outputDir,'pre.avi');
+vidOut = VideoWriter(outName, 'Uncompressed AVI');
+vidOut.FrameRate = FrameRate; 
+open(vidOut) 
+
+writeVideo(vidOut, F);
+
+disp('Finished')
+close(vidOut);
+
 %% Compress output data size via ffmpeg
 ! ffmpeg -i ./outputs/pre.avi -c:v libx264 -preset veryslow -crf 1 -pix_fmt yuv420p ./outputs/output.mp4
 fprintf('\n');
 fprintf('rename\n'); movefile('./outputs/output.mp4',['./outputs/', resultName, '.mp4']);
 fprintf('delete prefile\n'); delete('./outputs/pre.avi');
 fprintf('Done\n');
-
-% %% Visualize phase diferences
-% % pyr = 2;
-% % oct = 5;
-% % phase_caxis = [-2,2];
-% 
-% pyr = 3;
-% oct = 5;
-% phase_caxis = [-1.5,1.5];
-% 
-% for i = 3
-%     
-%     clear F
-% 
-%     for t = 1:1:nF
-%         figure('position',[1256.20000000000,1392.20000000000,403.200000000000,233.600000000000]);
-%         set(gcf,'Visible', 'off');
-%         set(gcf,'color',[0 0 0])
-%         colormap jet;
-% 
-%         if i == 1
-% %             imagesc(vid(:,:,:,t));
-% %             axis off;
-% 
-%         elseif i==2
-% %             imagesc( squeeze( JAF{pyr,ori}(t,:,:)) );
-% %             caxis(map_caxis);
-% %             axis off;
-% 
-%         elseif i==3
-%             imagesc( squeeze( filtered_phase{pyr,oct}(t,:,:) ) );
-%             caxis(phase_caxis);  
-%             axis off;
-%         end
-% 
-%         F(t) = getframe(gcf);
-%     end
-% 
-%     fprintf('\n');
-%     fprintf('Output Video\n');
-%     outName = fullfile(outputDir,['visualize_',num2str(i),'.avi']);
-%     vidOut = VideoWriter(outName, 'Uncompressed AVI');
-%     vidOut.FrameRate = FrameRate;
-%     open(vidOut) 
-% 
-%     writeVideo(vidOut, F);
-% 
-%     disp('Finished')
-%     close(vidOut);
-% 
-%     close all
-% 
-% end

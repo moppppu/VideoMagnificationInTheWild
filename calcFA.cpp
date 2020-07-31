@@ -31,7 +31,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
                   int nrhs, const mxArray *prhs[] )
 {   
     // Get Input Information
-    const int* dimArray = mxGetDimensions(prhs[0]);
+    const mwSize* dimArray = mxGetDimensions(prhs[0]); // mwSize == int, mwSize is better in mexMatrix
     const int nF = dimArray[0];
     const int nH = dimArray[1];
     const int nW = dimArray[2];
