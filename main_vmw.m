@@ -29,8 +29,8 @@ addpath(fullfile(pwd, 'myfunctions/utilize'));
 addpath(fullfile(pwd, 'Filters'));
 
 % Set dir
-% dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
-dataDir = '/Users/shoichirotakeda/Data/Video';
+dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
+% dataDir = '/Users/shoichirotakeda/Data/Video';
 outputDir = [pwd, '\outputs'];
 
 % Select input video
