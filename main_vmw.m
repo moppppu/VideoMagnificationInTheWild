@@ -29,8 +29,8 @@ addpath(fullfile(pwd, 'myfunctions/utilize'));
 addpath(fullfile(pwd, 'Filters'));
 
 % Set dir
-dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
-% dataDir = '/Users/shoichirotakeda/Movies';
+% dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
+dataDir = '/Users/shoichirotakeda/Data/Video';
 outputDir = [pwd, '\outputs'];
 
 % Select input video
@@ -153,8 +153,12 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
             R = ifft2(ifftshift(CSF_fft_Y)); 
 
             if f == 1
-                phaseRef = angle(R);    
-                phase = gpuArray( zeros(nF, numel(hIDX), numel(wIDX), 'single') );
+                phaseRef = angle(R);
+                if license('test', 'Parallel Computing Toolbox') && canUseGPU()
+                    phase = gpuArray( zeros(nF, numel(hIDX), numel(wIDX), 'single') );
+                else
+                    phase = zeros(nF, numel(hIDX), numel(wIDX), 'single');
+                end
                 norm_amp{level,ori} = zeros(nF, numel(hIDX), numel(wIDX), 'single');
             end
 
@@ -227,7 +231,9 @@ for ori = 1:1:nOri
         
 %         norm_amp{level,ori} = tmp_norm_amp; % miss @ cvpr2019
         sigma = 1/lambda(level,ori);
-        tmp_norm_amp = gpuArray(tmp_norm_amp);
+        if license('test', 'Parallel Computing Toolbox') && canUseGPU()
+            tmp_norm_amp = gpuArray(tmp_norm_amp);
+        end
         
         for f = 1:1:nF
             g_tmp_norm_amp = imgaussfilt(tmp_norm_amp(f,:,:), sigma);            
@@ -281,16 +287,19 @@ for level = 2:1:nPyrLevel-1
     FA = calcFA(tmp_subtle_phase, twindowSize, swindowSize);
     
     sigma = 1/lambda(level,ori);
-    tmp_FA = gpuArray(FA);
+    
+    if license('test', 'Parallel Computing Toolbox') && canUseGPU()
+        FA = gpuArray(FA);
+    end
 
     for frameIDX = 1:1:nF  
-        if sum(tmp_FA(frameIDX,:,:),'all') ~= 0
-            g_tmp_FA = imgaussfilt(tmp_FA(frameIDX,:,:), sigma);
-            tmp_FA(frameIDX,:,:) = ( g_tmp_FA - min(g_tmp_FA(:)) ) ./ ( max(g_tmp_FA(:)) - min(g_tmp_FA(:))+eps );
+        if sum(FA(frameIDX,:,:),'all') ~= 0
+            g_tmp_FA = imgaussfilt(FA(frameIDX,:,:), sigma);
+            FA(frameIDX,:,:) = ( g_tmp_FA - min(g_tmp_FA(:)) ) ./ ( max(g_tmp_FA(:)) - min(g_tmp_FA(:))+eps );
         end
     end
 
-    FAF{level} = gather(tmp_FA) .^ FAF_weight;
+    FAF{level} = gather(FA) .^ FAF_weight;
 end
 
 %% Magnification
@@ -369,7 +378,7 @@ set(gcf,'Visible', 'off');
 set(gcf,'color',[0 0 0])
 colormap jet;
 level = 2;
-ori = 6;
+ori = 5;
 map_caxis = [0,1];
 phase_caxis = [-0.3,0.3];
 % F(nF) = struct('cdata',[],'colormap',[]);
