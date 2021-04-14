@@ -2,7 +2,7 @@
 Shoichiro
 This repository contains codes corresponding to:
 
-S.Takeda, Y. Akagi, K.Okami, M.Isogai, H.Kimata. 
+S.Takeda, Y.Akagi, K.Okami, M.Isogai, H.Kimata. 
 **Video Magnification in the Wild Using Fractional Anisotropy in Temporal Distribution
 Shoichiro**. 
 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2019.
