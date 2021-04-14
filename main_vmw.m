@@ -1,11 +1,11 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % Author: Shoichiro Takeda, Nippon Telegraph and Telephone Corporation
-% Date (last update): 2020/01/16
+% Date (last update): 2021/04/14
 % License: Please refer to the attached LICENCE file
 %
 % Please refer to the original paper: 
-%   "Jerk-Aware Video Acceleration Magnification", CVPR 2018
+%   "Video Magnification in the Wild:", CVPR 2018
 %
 % All code provided here is to be used for **research purposes only**. 
 %
