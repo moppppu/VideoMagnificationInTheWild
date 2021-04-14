@@ -1,5 +1,5 @@
 // Need to compile this c++ code in MATLAB as below
-// mex -I"C:\folders\Eigen" calcFA.cpp '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
+// mex -I"C:\hoge\Eigen" calcFA.cpp '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
 
 #include <stdio.h>
 #include <string.h> /* strlen */
@@ -12,7 +12,7 @@ using namespace std;
 #include <Eigen>
 using namespace Eigen;
 
-#include <omp.h>
+// #include <omp.h>
 
 float calFA(MatrixXf sVal) {
     const int size = sVal.rows();
@@ -32,10 +32,10 @@ void mexFunction( int nlhs, mxArray *plhs[],
 {   
     // Get Input Information
     const mwSize* dimArray = mxGetDimensions(prhs[0]); // mwSize == int, mwSize is better in mexMatrix
-    const int nF = dimArray[0];
-    const int nH = dimArray[1];
-    const int nW = dimArray[2];
-    const int nO = dimArray[3];
+    const mwSize nF = dimArray[0];
+    const mwSize nH = dimArray[1];
+    const mwSize nW = dimArray[2];
+    const mwSize nO = dimArray[3];
 
     // Read Data
     float* pr = (float*)mxGetPr(prhs[0]);
@@ -53,7 +53,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
     pl0 = (float*)mxGetPr(plhs[0]);
     int plIDX = 0;
     
-    #pragma omp parallel for num_threads(omp_get_max_threads()) private(prIDX, tmpIDX, plIDX) 
+//     #pragma omp parallel for num_threads(omp_get_max_threads()) private(prIDX, tmpIDX, plIDX) 
     for(int f=0+tWindow/2; f<nF-tWindow/2; f++){
         for(int h=0; h<nH; h++){
             for(int w=0; w<nW; w++){

@@ -5,14 +5,15 @@
 % License: Please refer to the attached LICENCE file
 %
 % Please refer to the original paper: 
-%   "Video Magnification in the Wild:", CVPR 2018
+%   "﻿Video Magnification in the Wild Using Fractional Anisotropy in
+%   Temporal Distribution", CVPR 2019
 %
 % All code provided here is to be used for **research purposes only**. 
 %
 % This implementation also includes some lightly-modified third party codes:
-%   - matlabPyrTools, from "https://github.com/LabForComputationalVision/matlabPyrTools"
-%   - myPyToolsExt&Filters from "http://people.csail.mit.edu/nwadhwa/phase-video/PhaseBasedRelease_20131023.zip"
-%   - main & myfuntions,  from "https://github.com/acceleration-magnification/sources (*initial version)"
+%   - myPyToolsExt, from "http://people.csail.mit.edu/nwadhwa/phase-video/PhaseBasedRelease_20131023.zip"
+%   - main_vmw & myfuntions,  from "https://github.com/acceleration-magnification/sources (*initial version)"
+%   - Eigen, from "http://eigen.tuxfamily.org/index.php?title=Main_Page"
 % All credit for the third party codes is with the authors.
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -29,12 +30,12 @@ addpath(fullfile(pwd, 'myfunctions/utilize'));
 addpath(fullfile(pwd, 'Filters'));
 
 % Set dir
-dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
-% dataDir = '/Users/shoichirotakeda/Data/Video';
-outputDir = [pwd, '\outputs'];
+% dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
+dataDir = '/Users/shoichirotakeda/Data/Video';
+outputDir = [pwd];
 
 % Select input video
-inFile = fullfile(dataDir,['ukulele.mp4']); % Change your data name
+inFile = fullfile(dataDir,['gun.mp4']); % Change your data name
 [Path,FileName,Ext] = fileparts(inFile);
 
 % Read video
@@ -49,27 +50,17 @@ fprintf('Original VideoSize ... nH:%d, nW:%d, nC:%d, nF:%d\n', nH, nW, nC, nF);
 
 % Set CSF parameter
 nOri = 8; % number of orientations
-nProp = 5; % fix all video in CVPR2018
+nProp = 5; % fix all video in "Jerk-Aware Video Acceleration Magnification" @ CVPR2018
 
 % Set magnification parameter (gun.avi)
-% ScaleVideoSize = 8/10;
-% StartFrame = 1;
-% EndFrame   = nF;
-% alpha = 100;
-% targetFreq = 20;
-% fs = 480;
-% beta = 0.5;
-% FAF_weight = 1;
-
-% Set magnification parameter (ukulele.mp4)
-ScaleVideoSize = 1/3;
-StartFrame = 4.8*FrameRate;
-EndFrame   = StartFrame+10*FrameRate;
-alpha = 260;
-targetFreq = 40;
-fs = 240;
-beta = 1;
-FAF_weight = 5;
+ScaleVideoSize = 8/10;
+StartFrame = 1;
+EndFrame   = nF;
+alpha = 100;
+targetFreq = 20;
+fs = 480;
+beta = 0.5;
+FAF_weight = 1;
 
 % Set output Name
 resultName = ['mag-vmw-',FileName, ...
@@ -107,7 +98,7 @@ end
 % Perform 2D FFT
 fft_Y = single(fftshift(fftshift(fft2(squeeze(originalFrame(:,:,1,:))),1),2));
 
-%% Get complex steerable filters (CSF) and filter indices (determine the filtering area in Fouried domain)
+%% Get complex steerable filters (CSF) and filter indices (determine the filtering area in Fourier domain)
 % Get maximum pyramid levels
 ht = maxSCFpyrHt(zeros(nH,nW));
 
@@ -117,7 +108,7 @@ ht = maxSCFpyrHt(zeros(nH,nW));
 % Get pyramid patameter
 nPyrLevel = size(CSF,1);
 
-%% Get pyramid scale facter : lambda (Eq.6)
+%% Get pyramid scale facter : lambda
 lambda =  zeros(nPyrLevel, nOri);
 for level = 1:1:nPyrLevel
     if level == 1 || level == nPyrLevel
@@ -148,7 +139,6 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
         cfilter = CSF{level,ori};       
 
         for f = 1:nF
-            % here, we apply rondomized sparcification algorhithm
             CSF_fft_Y = cfilter .* fft_Y(hIDX, wIDX, f);  
             R = ifft2(ifftshift(CSF_fft_Y)); 
 
@@ -168,12 +158,12 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
             %%% Amplitude Normalization %%%
             norm_ampCurrenct = ampCurrent ./ lambda(level,ori);
 
-            %%% whitening %%%
+            %%% Whitening %%%
             N = numel(norm_ampCurrenct);
             x = norm_ampCurrenct;
             u = (1/N) * sum(sum(x));
             sigma = sqrt( (1/(N-1)) * sum(sum( (x - u).^2 )));
-            norm_ampCurrenct = (x - u) / sigma; % (Eq.17)
+            norm_ampCurrenct = (x - u) / sigma;
             
             phase(f,:,:) = mod(pi+phaseCurrent-phaseRef,2*pi)-pi;
             norm_amp{level,ori}(f,:,:) = single(norm_ampCurrenct);
@@ -182,42 +172,33 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
         fprintf('Phase Unwrapping \n');
         phase = unwrap(phase);
         
-        % Phase-based video motion processing in SIGGRAPH 2013
-        % filtered_phase{level,ori} = gather(permute(FIRWindowBP(permute(phase, [2,3,1]), (targetFreq-1/2)/fs, (targetFreq+1/2)/fs), [3,1,2]));
-
         fprintf('Temporal Acceleration Filtering \n');
         filtered_phase{level,ori} = gather(applyTAF(phase, 1, targetFreq, fs));
 
-        fprintf('Create Jerk-Aware Filter\n'); % (Eq.1-5)
+        fprintf('Create Jerk-Aware Filter\n');
         JAF{level,ori} = gather(getJAF(phase, 1, targetFreq, fs, lambda(level,ori).*beta));
     end
 end
 
-%% Propagation Correction for Jerk-Aware Filter (Eq.7)
+%% Propagation Correction for Jerk-Aware Filter
 fprintf('\n');
 fprintf('Propagation Correction for Jerk-Aware Filter\n');  
-
 for ori = 1:1:nOri
     fprintf('Processing orientation: %d of %d\n', ori, nOri);
-
     for level = 2:1:nPyrLevel-1
         pJAF = JAF{level,ori}; % initialized
-
         for prop = level+1:level+(nProp-1)
             if prop <= nPyrLevel-1
                 pJAF = pJAF .* myimresize3(JAF{prop,ori}, pJAF); % multiple cascade
             end
         end
-
         JAF{level,ori} = pJAF;
     end
-    
 end
 
 %% Create Hierarchical Edge-Aware Regularization
 fprintf('\n');
 fprintf('Create Hierarchical Edge-Aware Regularization\n'); 
-
 for ori = 1:1:nOri
     for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
         fprintf('Processing pyramid level: %d, orientation: %d\n', level, ori);
@@ -228,8 +209,7 @@ for ori = 1:1:nOri
                 tmp_norm_amp = max( tmp_norm_amp, myimresize3(norm_amp{prop,ori}, tmp_norm_amp) );
             end
         end
-        
-%         norm_amp{level,ori} = tmp_norm_amp; % miss @ cvpr2019
+
         sigma = 1/lambda(level,ori);
         if license('test', 'Parallel Computing Toolbox') && canUseGPU()
             tmp_norm_amp = gpuArray(tmp_norm_amp);
@@ -248,31 +228,23 @@ clear norm_amp; % for releasing memory
 %% Create Fractioanl Anisotropic Filter
 fprintf('\n');
 fprintf('Create Fractioanl Anisotropic Filter\n'); 
-
 if size(dir('calcFA.mexw64'),1) == 0
-mex -I"C:\Users\shoichirotakeda\Programs\MATLAB\Video Magnification in the Wild (forShare)\Eigen" ...
-        calcFA.cpp ...
-        '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
+    mex -I"C:\hoge\Eigen" calcFA.cpp '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"' % Change your Eigen dir
 else
-    disp('Exist Builded Mex file')
+    disp('Exist Builded Mex file');
 end
 
-windowSize = ceil(fs / (4 * targetFreq)); 
-sigma      = windowSize/sqrt(2);
+twindowSize = ceil(fs / (4 * targetFreq)); 
 
-if windowSize < 3
-    windowSize = 3;
+if twindowSize < 3
+    twindowSize = 3;
 end
 
-if mod(windowSize,2) == 0 % windowSize�������̎� 
-    x = linspace(-4*sigma, 4*sigma, windowSize+1);
-else % windowSize����̎� 
-    x = linspace(-4*sigma, 4*sigma, windowSize);
-    windowSize = windowSize - 1;
+if mod(twindowSize,2) ~= 0
+    twindowSize = twindowSize - 1;
 end
 
-twindowSize = windowSize;
-swindowSize = 4;
+swindowSize = 4; % We fixed all expetiments
 
 for level = 2:1:nPyrLevel-1
     fprintf('Processing pyramid level: %d\n', level);
@@ -316,8 +288,6 @@ for level = 2:1:nPyrLevel-1 % except for the highest/lowest pyramid level
         wIDX = filtIDX{level,ori}{2};
         cfilter = CSF{level,ori};
         
-        % detP = filtered_phase{level,ori}; 
-        % detP = JAF{level,ori} .* filtered_phase{level,ori};
         resize_FAF = myimresize3(FAF{level}, filtered_phase{level,ori});    
         detP = resize_FAF .* g_norm_amp{level,ori} .* JAF{level,ori} .* filtered_phase{level,ori};
 
@@ -344,7 +314,6 @@ end
 %% Rendering Video
 fprintf('\n');
 fprintf('Rendering Video\n');
-tic;
 
 outFrame = originalFrame; 
 for f = 1:nF
@@ -355,7 +324,7 @@ end
 
 fprintf('\n');
 fprintf('Output Video\n');
-outName = fullfile(outputDir,'pre.avi');
+outName = fullfile(outputDir,'output.avi');
 vidOut = VideoWriter(outName, 'Uncompressed AVI');
 vidOut.FrameRate = FrameRate;
 open(vidOut) 
@@ -365,92 +334,3 @@ outFrame_final = im2uint8(outFrame);
 writeVideo(vidOut, outFrame_final);
 
 close(vidOut);
-
-% %% Compress output data size via ffmpeg
-% ! ffmpeg -i ./outputs/pre.avi -c:v libx264 -preset veryslow -crf 1 -pix_fmt yuv420p ./outputs/output.mp4
-% fprintf('\n');
-% fprintf('rename\n'); movefile('./outputs/output.mp4',['./outputs/', resultName, '.mp4']);
-% fprintf('delete prefile\n'); delete('./outputs/pre.avi');
-% fprintf('Done\n');
-
-figure('position', [9.80000000000000,599.400000000000,3034,934.400000000000]);
-set(gcf,'Visible', 'off');
-set(gcf,'color',[0 0 0])
-colormap jet;
-level = 2;
-ori = 5;
-map_caxis = [0,1];
-phase_caxis = [-0.3,0.3];
-% F(nF) = struct('cdata',[],'colormap',[]);
-tmp_FAF = myimresize3(FAF{level}, filtered_phase{level,ori});    
-for t = 1:1:nF
-disp(t);
-subplot(2,4,1);
-imagesc(vid(:,:,:,t));
-axis off;
-
-subplot(2,4,2);
-imagesc( squeeze( JAF{level,ori}(t,:,:)) );
-caxis(map_caxis);
-% title('JAF')
-axis off;
-
-subplot(2,4,3);
-imagesc( squeeze(tmp_FAF(t,:,:)) );
-% title('FAF')
-caxis(map_caxis);
-axis off;
-
-subplot(2,4,4);
-imagesc( squeeze(g_norm_amp{level,ori}(t,:,:)) );
-% title('HEAR')
-caxis(map_caxis*0.5);
-axis off;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-subplot(2,4,4+1);
-imagesc(squeeze(filtered_phase{level,ori}(t,:,:)));
-caxis([-0.20,0.20]);   
-% title('acc')
-axis off;
-
-subplot(2,4,4+2);
-imagesc(squeeze(JAF{level,ori}(t,:,:) .* filtered_phase{level,ori}(t,:,:)));
-caxis([-0.13, 0.13]);
-% title('jerk')
-axis off;
-
-subplot(2,4,4+3);
-imagesc(squeeze(tmp_FAF(t,:,:) .* JAF{level,ori}(t,:,:) .* filtered_phase{level,ori}(t,:,:)));
-caxis([-0.048, 0.048]);  
-% title('jerk with FAF')
-axis off;
-
-subplot(2,4,4+4);
-imagesc(squeeze(g_norm_amp{level,ori}(t,:,:) .* tmp_FAF(t,:,:) .* JAF{level,ori}(t,:,:) .* filtered_phase{level,ori}(t,:,:)));
-caxis([-0.007, 0.007]);   
-% title('our')
-axis off;
-
-F(t) = getframe(gcf);
-end
-
-fprintf('\n');
-fprintf('Output Video\n');
-outName = fullfile(outputDir,'pre.avi');
-vidOut = VideoWriter(outName, 'Uncompressed AVI');
-vidOut.FrameRate = FrameRate; 
-open(vidOut) 
-
-writeVideo(vidOut, F);
-
-disp('Finished')
-close(vidOut);
-
-%% Compress output data size via ffmpeg
-! ffmpeg -i ./outputs/pre.avi -c:v libx264 -preset veryslow -crf 1 -pix_fmt yuv420p ./outputs/output.mp4
-fprintf('\n');
-fprintf('rename\n'); movefile('./outputs/output.mp4',['./outputs/', resultName, '.mp4']);
-fprintf('delete prefile\n'); delete('./outputs/pre.avi');
-fprintf('Done\n');
