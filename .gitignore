@@ -1,3 +1,6 @@
-/outputs/
-calcFA.mexmaci64
-calcFA.mexw64
+*.mat
+*.epsc
+*.png
+*.eps
+*.avi
+*.mp4
