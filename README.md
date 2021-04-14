@@ -11,8 +11,7 @@ URL: https://openaccess.thecvf.com/content_CVPR_2019/papers/Takeda_Video_Magnifi
 Please cite as:
 
     @inproceedings{takeda2018cvpr,
-      title = {Video Magnification in the Wild Using Fractional Anisotropy in Temporal Distribution
-Shoichiro},
+      title = {Video Magnification in the Wild Using Fractional Anisotropy in Temporal Distribution},
       author = {Takeda, Shoichiro and Akagi, Yasunori and Okami, Kazuki and Isogai, Megumi and Kimata, Hideaki},
       booktitle = {The IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
       year = {2019}
