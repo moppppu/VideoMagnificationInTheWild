@@ -1,12 +1,11 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
 % Author: Shoichiro Takeda, Nippon Telegraph and Telephone Corporation
-% Date (last update): 2021/04/14
+% Date (last update): 2021/04/15
 % License: Please refer to the attached LICENCE file
 %
 % Please refer to the original paper: 
-%   "﻿Video Magnification in the Wild Using Fractional Anisotropy in
-%   Temporal Distribution", CVPR 2019
+%   "﻿Video Magnification in the Wild Using Fractional Anisotropy in Temporal Distribution", CVPR 2019
 %
 % All code provided here is to be used for **research purposes only**. 
 %
@@ -23,15 +22,12 @@ close all;
 clear all;
 
 % Add path
-addpath(fullfile(pwd, 'outputs'));
 addpath(fullfile(pwd, 'myPyrToolsExt'));
 addpath(fullfile(pwd, 'myfunctions/Filters'));
 addpath(fullfile(pwd, 'myfunctions/utilize'));
-addpath(fullfile(pwd, 'Filters'));
 
 % Set dir
-% dataDir = 'C:\Users\shoichirotakeda\Data\Video'; % Change your dir
-dataDir = '/Users/shoichirotakeda/Data/Video';
+dataDir = '/Users/shoichirotakeda/Data/Video'; % Change your dir
 outputDir = [pwd];
 
 % Select input video
@@ -228,8 +224,16 @@ clear norm_amp; % for releasing memory
 %% Create Fractioanl Anisotropic Filter
 fprintf('\n');
 fprintf('Create Fractioanl Anisotropic Filter\n'); 
-if size(dir('calcFA.mexw64'),1) == 0
-    mex -I"C:\hoge\Eigen" calcFA.cpp '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"' % Change your Eigen dir
+if ispc && size(dir('calcFA.mexw64'),1) == 0
+    Eigenpath = ['-I' pwd '/Eigen'];
+    Omppath = '-I/hogehoge/include'; % Change Dir
+    ompcommand = ['-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'];
+    mex(Eigenpath, Omppath, 'calcFA.cpp', ompcommand);
+elseif ismac && size(dir('calcFA.mexmaci64'),1) == 0
+    Eigenpath = ['-I' pwd '/Eigen'];
+    Omppath = '-I/usr/local/Cellar/libomp/11.1.0/include'; % Change Dir
+    ompcommand = ['-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'];
+    mex(Eigenpath, Omppath, 'calcFA.cpp', ompcommand);
 else
     disp('Exist Builded Mex file');
 end

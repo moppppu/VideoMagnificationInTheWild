@@ -1,5 +1,8 @@
 // Need to compile this c++ code in MATLAB as below
-// mex -I"C:\hoge\Eigen" calcFA.cpp '-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'
+// Eigenpath = ['-I' pwd '/Eigen'];
+// Omppath = '-I/hoge/include'; % Change Dir
+// ompcommand = ['-DUSEOMP' 'OPTIMFLAGS="$OPTIMFLAGS' '/openmp"'];
+// mex(Eigenpath, Omppath, 'calcFA.cpp', ompcommand);
 
 #include <stdio.h>
 #include <string.h> /* strlen */
@@ -12,7 +15,7 @@ using namespace std;
 #include <Eigen>
 using namespace Eigen;
 
-// #include <omp.h>
+#include <omp.h>
 
 float calFA(MatrixXf sVal) {
     const int size = sVal.rows();
@@ -53,7 +56,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
     pl0 = (float*)mxGetPr(plhs[0]);
     int plIDX = 0;
     
-//     #pragma omp parallel for num_threads(omp_get_max_threads()) private(prIDX, tmpIDX, plIDX) 
+    #pragma omp parallel for num_threads(omp_get_max_threads()) private(prIDX, tmpIDX, plIDX) 
     for(int f=0+tWindow/2; f<nF-tWindow/2; f++){
         for(int h=0; h<nH; h++){
             for(int w=0; w<nW; w++){
